@@ -1,0 +1,163 @@
+######################################################
+# Part 9: SVMGA training
+# Apply SVM Analysis
+# Description: SVMGAtraining optimizes parameters of Support Vector Machine (SVM) using Genetic Algorithm (GA).
+# The method is applied to pre-processed CreditReform data from RDC.
+# The result is publised in SFB 649 Discussion Paper 2012-030 with title
+# Support Vector Machines with Evolutionary Model Selection for Default Prediction.
+# The data is not publictly published.  
+# ------------------------------------------------------------------------------
+# Usage:       -
+# ------------------------------------------------------------------------------
+# Inputs:      -
+# ------------------------------------------------------------------------------
+# Output:      Estimates of SVM parameters (simga and C).
+# ------------------------------------------------------------------------------
+# Example:     -
+# ------------------------------------------------------------------------------
+# Author:      sanghv, 20130526
+#
+######################################################
+rm(list=ls(all=TRUE))
+
+# load package kernlab and ggplot2
+
+library(kernlab)
+#library(tseries)
+library(quadprog)
+#library(zoo)
+library(genalg)
+library(ROCR)
+
+# read cleaned data set
+dd = read.csv("CreditScoring01.csv", header=TRUE)
+
+# 1) a train (aka learning) dataset
+# 2) a test dataset
+# let's keep 2/3 of the data for learning, and 1/3 for testing
+n = nrow(dd)
+learn = sample(1:n, size=round(0.67 * n))
+nlearn = length(learn)
+ntest = n - nlearn
+##############
+
+TRAIN = dd
+TEST = dd[-learn,]
+
+label <- as.factor(TRAIN[ ,c(1)])
+
+# optimize two values (sigma and C) to maximize fitness function
+
+fitness.old <- 100
+
+evaluate <- function(string=c() ) {
+     returnVal = NA;
+     if (length(string) == 2) {
+
+  # SVM modeling
+	bankmodel_draw <- ksvm(Status~., data=TRAIN, type = "C-svc", kernel = "rbfdot",kpar = list(sigma = string[1]), C = string[2])
+
+	# labeling the predicted score
+	fit <- fitted(bankmodel_draw)
+	
+	# performance for prediction
+	pred.svm <- prediction(fit, label)
+
+	# calculate AUC and AR
+	AUC.value <- performance(pred.svm, 'auc')
+
+	auc <- AUC.value@y.values[[ 1 ]]
+	ar <- (2*auc) -1
+	
+	print(auc)
+	fitness.new <- auc
+	
+	returnVal = abs(fitness.old - fitness.new);
+       }
+         else {
+	stop("Expecting a chromosome of length 2!");
+       }
+
+	fitness.old <- fitness.new
+	returnVal
+	}
+
+
+monitor <- function(obj) {   
+	# plot the population
+	xlim = c(obj$stringMin[1], obj$stringMax[1]);
+	ylim = c(obj$stringMin[2], obj$stringMax[2]);
+	plot(obj$population, xlim=xlim, ylim=ylim, xlab="sigma", ylab="C");
+	# adding text to the plot
+	# text( (obj$stringMax[1] - 40), (obj$stringMin[2] + 10), label=bquote(paste("generation" == .(obj$iters))) )
+	
+}
+
+population = 10
+generation = 2
+elitisme   = 0.2*population
+mutation.rate=0.1
+
+rbga.results = rbga(c(0.001, 0.001), c(200, 200), popSize=population, iters=generation, mutationChance=mutation.rate, elitism=elitisme, monitorFunc=monitor, evalFunc=evaluate)
+	win.graph()
+	plot(rbga.results)
+	win.graph()
+	plot(rbga.results, type="hist", breaks=100)
+	win.graph()
+	plot(rbga.results, type="vars")
+	opt.results <- summary(rbga.results)
+	print(opt.results)
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------
+
+# Performance of optimum model
+# Change the parameters value based on GA optimization
+bestSigma<-rbga.results$population[1,1]
+bestC<-rbga.rusults$population[1,2[
+optimum.model <- ksvm(Status~., data=TRAIN, type = "C-svc", kernel = "rbfdot",kpar = list(sigma = bestSigma), C =bestC, cross=5, prob.model=TRUE)
+optimum.model
+predict(optimum.model, TRAIN[ ,-1],type="probabilities")
+
+#plot(optimum.model, data=TRAIN[,c(1,2)])
+
+win.graph()
+fit.opt <- fitted(optimum.model)
+pred.opt <- prediction(fit.opt, label)
+
+# ------------------------------------------------------------------------------------------------------------------------------------
+# calculate AUC and AR
+
+AUC.opt <- performance(pred.opt, 'auc')
+auc.opt <- AUC.opt@y.values[[ 1 ]]
+ar.opt <- (2*auc.opt) -1
+print(auc.opt)
+print(ar.opt)
+
+# ------------------------------------------------------------------------------------------------------------------------------------
+# create sensitivity / specifificity plot ( measure=y-axis: "sens" = "tpr", x.measure=x-axis: "spec"  = "tnr")
+# -- tpr : true positive rate
+# -- tnr : true negative rate
+
+perf.opt.sens.spec <- performance(pred.opt , 'sens', 'spec')
+plot(perf.opt.sens.spec, lty="dotted", col="blue",main="sensitifity / specificity plot", xlab="specificity", ylab="sensitifity") # lty : line type
+plot(perf.opt.sens.spec, avg="vertical", lwd=3, col="red", spread.estimate="boxplot",add=TRUE)
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------
+# create ROC curve (measure=y-axis: "tpr", x.measure=x-axis: "fpr") across the range of all cut-off value
+# -- tpr : true positive rate (HIT RATE) --> called also "SENSITIVITY"
+# -- fpr : false positive rate (FALSE ALARM RATE)
+
+perf.opt.roc <- performance(pred.opt, 'tpr', 'fpr')
+plot(perf.opt.roc, lty="dotted", col="blue",main="ROC curve of SVMs", xlab="false alarm rate", ylab="hit rate") # lty : line type
+plot(perf.opt.roc, avg="vertical", lwd=3, col="red", spread.estimate="boxplot",add=TRUE)
+
+# ------------------------------------------------------------------------------------------------------------------------------------
+# create curve of accuracy across range of all cut-off value
+
+perf.opt.acc <- performance(pred.opt, 'acc')
+plot(perf.opt.acc, lty="dotted", col="red",main="Accuracy curve of SVMs") # lty : line type
+plot(perf.opt.acc, avg="vertical", lwd=3, col="red", spread.estimate="stderror",plotCI.lwd=2,add=TRUE)
+
+
