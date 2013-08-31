@@ -114,7 +114,7 @@ rbga.results = rbga(c(0.001, 0.001), c(200, 200), popSize=population, iters=gene
 # Performance of optimum model
 # Change the parameters value based on GA optimization
 bestSigma<-rbga.results$population[1,1]
-bestC<-rbga.rusults$population[1,2[
+bestC<-rbga.results$population[1,2[
 optimum.model <- ksvm(Status~., data=TRAIN, type = "C-svc", kernel = "rbfdot",kpar = list(sigma = bestSigma), C =bestC, cross=5, prob.model=TRUE)
 optimum.model
 predict(optimum.model, TRAIN[ ,-1],type="probabilities")
